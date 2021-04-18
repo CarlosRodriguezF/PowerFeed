@@ -47,7 +47,7 @@ const int SW_right = 12;    //Input switch signal for right movement
 
 **PICTURES**
 
-![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/BlockDiagram.JPG?raw=true)
+![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/BlockDiagramU.JPG?raw=true)
 ![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/P1070544.JPG?raw=true)
 ![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/P1070557.JPG?raw=true)
 
