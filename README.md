@@ -4,6 +4,11 @@ PowerFeed for Workshop Machines based on Arduino
 # PowerFeed
 PowerFeed for Workshop Machines based on Arduino
 
+**REVISION**
+
+V1.0 
+- First version with the basic functionallity LEFT and RIGHT movement, mm/min selection and initial lock in case the switch is in LEFT or RIGHT to avoid un-desired movements
+
 **DESCRIPTION**
 
 Project based on Arduino to be able to control PAP motor driver (EN,DIR,PULSE) and set the speed in mm/min of the axis of your machines, like lathe, milling machine...
@@ -32,9 +37,13 @@ bool EN_Inv  = 0;     //Use this value to Invert or not the ENable Pin function.
 
 **PICTURES**
 
+![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/BlockDiagram.JPG?raw=true)
+![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/P1070544.JPG?raw=true)
+![alt tag](https://github.com/CarlosRodriguezF/PowerFeed/blob/main/P1070557.JPG?raw=true)
 
 
 NOTES:
 - Dont forget to use debouncing circuitry on the ENCODER in case it doesnt have it, is is recomended
 - Dont supply the 5V for the LCD directly from the ARDUINO use external power source
 - Block Diagram just as reference
+- You can see more pictures in the git
