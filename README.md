@@ -1,9 +1,6 @@
 # PowerFeed
 PowerFeed for Workshop Machines based on Arduino
 
-# PowerFeed
-PowerFeed for Workshop Machines based on Arduino
-
 **REVISION**
 
 V1.0 
@@ -34,6 +31,19 @@ int Machine_lead  = 2;        //mm/rev this is the mm which your axis moves each
 
 bool DIR_Inv  = 1;    //Use this value to Invert or not the DIRection Pin function. (In case the direction of the power feed is inverted)
 bool EN_Inv  = 0;     //Use this value to Invert or not the ENable Pin function.   
+
+You can change the pin out assignation in the main as well
+/**---------------------------------Pinout definition---------------------------------**/
+//Modify this values according your connectionts, just dont move encoder pins and PULSE pin they are fixed
+const int pinA = 2;         //Encoder input pin A (If selected 2/3 works with interrupt) (Do not change)
+const int pinB = 3;         //Encoder input pin B (If selected 2/3 works with interrupt) (Do not change)
+const int PULSE =11;        //Pulse signal for Stepper driver (Do not change)    
+const int EN = 6;           //Enable signal for Stepper driver
+const int DIR = 7;          //Direction signal for stepper driver
+const int EN_sw = 10;       //Encoder switch
+const int SW_left = 9;      //Input switch signal for left movement
+const int SW_right = 12;    //Input switch signal for right movement
+/**-----------------------------------------------------------------------------------**/
 
 **PICTURES**
 
