@@ -6,6 +6,11 @@ PowerFeed for Workshop Machines based on Arduino
 V1.0 
 - First version with the basic functionallity LEFT and RIGHT movement, mm/min selection and initial lock in case the switch is in LEFT or RIGHT to avoid un-desired movements
 
+V1.1
+- Optimized encoder Switch read, removed function from main and included in function to change the feedrate
+- Added Aceleration profiles 
+- Added High Speed mode, keep the encoder pressed and the speed will go to high speed
+
 **DESCRIPTION**
 
 Project based on Arduino to be able to control PAP motor driver (EN,DIR,PULSE) and set the speed in mm/min of the axis of your machines, like lathe, milling machine...
