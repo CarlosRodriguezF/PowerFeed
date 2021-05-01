@@ -5,7 +5,11 @@
 #include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
 
-const float version = 1.0;
+const float version = 1.1;
+
+//Optimized encoder Switch read, removed function from main and included in function to change the feedrate
+//Added Aceleration profiles 
+//Added High Speed mode, keep the encoder pressed and the speed will go to high speed
 
 //Define functions for bit manipulation
 #define BIT_SET(a,b) ((a) |= (1ULL<<(b)))
@@ -30,10 +34,12 @@ void stepper_enable(bool enable);
 void direction_selection(bool direction);
 int check_switch_status(void);
 void print_main_page(int feedrate);
-int read_encoder_feedrate(int feed_rate, int mode);
+int read_encoder_feedrate(int feed_rate);
 void lcd_clear(int row, int start_pos, int end_pos);
 int read_encoderswitch(void);
 void draw_arrow(int direction);
+float aceleration_feedrate(float current_feedrate, int target_feedrate);
+
 
 /**-----------------------------------------------------------------------------------**/
 
@@ -59,6 +65,8 @@ long Arduino_clk = 16000000;  //Oscillator frequency of arduino board (Nano 16MH
 float Motor_stepangle = 1.8;  //This value is defined in the specs of the motor
 int Driver_stepsrev = 6400;   //This value define the microstteping which you have selected in your driver
 int Machine_lead  = 2;        //mm/rev this is the mm which your axis moves each turn of your leadscrew (In my case 2mm each rev)
+int Motor_aceleration = 200;   //Value for aceleration in mm/min^2 (Limited to 200mm/min^2)
+int high_speed_feedrate = 400; //Value for speed in High speed mode (Encoder SW held)
 
 bool DIR_Inv  = 1;    //Use this value to Invert or not the DIRection Pin function. (In case the direction of the power feed is inverted)
 bool EN_Inv  = 0;     //Use this value to Invert or not the ENable Pin function.   
@@ -91,10 +99,14 @@ int previous_state = INIT;
 //Initialization main variables 
 int feedrate = 0;           //Feedrate currently selected
 int new_feedrate = 5;       //Variable for new feedrate selection
+int saved_feedrate = 5;     //Variable to save the current feedrate in high speed mode
 int encoder_sw_status = 0;  //Variable for the status of the encoder switch
 bool change_mode = 0;       //Variable to select the mode between x1 and x10 in the encoder changing the feedrate
 int oldEncPos, encPos;      //Variables for encoder position
 int switch_status = 1;      //Default value for Switch position
+bool speed_mode = 0;        //Variable to select if we are in high speed mode or not
+
+float test_feedrate = 0;
 /**-----------------------------------------------------------------------------------**/
 
 
@@ -168,18 +180,25 @@ switch (state) {
     }
     break;
   case STANDBY:     //STANDBY Main status when there is no movement.
+    if (speed_mode == 1){             //If we were in speed mode, remove and clean the variables
+      speed_mode = 0;
+      new_feedrate = saved_feedrate;  //Recover the previous feedrate
+      print_main_page(new_feedrate);
+    }
+    test_feedrate = aceleration_feedrate(test_feedrate, 0); //Set the feedrate according to the aceleration
+    if (test_feedrate >= 1){
+      set_speed_mmmin((int)test_feedrate);    //Enable the PULSE Output and addapt the value
+    }else{
+      disable_pulse_output();       //Disable the PULSE output
+      stepper_enable(DISABLE);      //Disable Stepper Driver
+      test_feedrate = 0;            //Feedrate set to Zero, deceleration completed
+    }
     if (feedrate != new_feedrate){  //If new change in the feedrate update the feedrate variable and print the new value
     feedrate = new_feedrate;    
     print_main_page(feedrate);      //Printing feedrate value
     }
-    new_feedrate = read_encoder_feedrate(feedrate, change_mode); //Check if there is change in the feedrate
-    if (read_encoderswitch() == 5){ //Check if we have Push the Encoder Switch to change the mode x1 or x10
-      change_mode = !change_mode;   //Change the mode
-      //switch_status = 0;            //Reset status variable       REMOVE
-    }
+    new_feedrate = read_encoder_feedrate(feedrate); //Check if there is change in the feedrate
     if (state != previous_state){   //Check if we came from other state
-      disable_pulse_output();       //Disable the PULSE output
-      stepper_enable(DISABLE);      //Disable Stepper Driver
       lcd.clear();                
       print_main_page(feedrate);
       lcd.setCursor(0,1);
@@ -203,25 +222,30 @@ switch (state) {
     }
     previous_state = STANDBY;       //Move the previous state to STANDBY
     break;
-  case MOVING_RIGHT:      //Status to move the axis to the RIGHT     
+  case MOVING_RIGHT:      //Status to move the axis to the RIGHT  
+    if (encoder.getButton() == 3 && speed_mode == 0){     //Held the encoder sw and we were not in speed mode, enter in speed mode
+      saved_feedrate = new_feedrate;        //Storage the new feedrate
+      new_feedrate = high_speed_feedrate;   //Set the high speed feedrate
+      speed_mode = 1;                       //Enable the speed mode
+    }else if (encoder.getButton() == 0 && speed_mode == 1){   //Release encoder sw
+      speed_mode = 0;                       //Disable the speed mode
+      new_feedrate = saved_feedrate;        //Recover feedrate value
+      print_main_page(new_feedrate);
+    }
+    test_feedrate = aceleration_feedrate(test_feedrate, new_feedrate); //Set the feedrate according to the aceleration
+    if (test_feedrate != new_feedrate){
+      set_speed_mmmin((int)test_feedrate);    //Enable the PULSE Output and addapt the value
+    }
     if (feedrate != new_feedrate){  //If new change in the feedrate update the feedrate variable and print the new value
       feedrate = new_feedrate;
-      print_main_page(feedrate);
-      set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value
+      print_main_page(new_feedrate);
     }
-    new_feedrate = read_encoder_feedrate(feedrate, change_mode);  //Check if there is change in the feedrate
-    if (read_encoderswitch() == 5){ //Check if we have Push the Encoder Switch to change the mode x1 or x10
-      change_mode = !change_mode;   //Change the mode
-      Serial.print("Change Mode");
-      Serial.print(change_mode);
-      //switch_status = 0;            //Reset status variable       REMOVE
-    }
+    new_feedrate = read_encoder_feedrate(feedrate);  //Check if there is change in the feedrate
     if (state != previous_state){   //Check if we came from other state
       lcd.clear();
       print_main_page(feedrate);
       lcd.setCursor(0,1);
       lcd.print("RIGHT");
-      set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value after come from other state
       direction_selection(RIGHT);   //Select direction pin to RIGHT
       stepper_enable(ENABLE);       //Enable EN pin
     }
@@ -247,24 +271,31 @@ switch (state) {
     previous_state = MOVING_RIGHT;
     break;
   case MOVING_LEFT:     //Status to move the axis to the LEFT
+    if (encoder.getButton() == 3 && speed_mode == 0){   //Held the encoder sw and we were not in speed mode, enter in speed mode
+      saved_feedrate = new_feedrate;        //Storage the new feedrate
+      new_feedrate = high_speed_feedrate;   //Set the high speed feedrate
+      speed_mode = 1;                       //Enable the speed mode
+    }else if (encoder.getButton() == 0 && speed_mode == 1){ //Release encoder sw
+      speed_mode = 0;                       //Disable the speed mode
+      new_feedrate = saved_feedrate;        //Recover feedrate value
+      print_main_page(new_feedrate);
+    }
+    test_feedrate = aceleration_feedrate(test_feedrate, new_feedrate);  //Set the feedrate according to the aceleration
+    if (test_feedrate != new_feedrate){
+      set_speed_mmmin((int)test_feedrate);    //Enable the PULSE Output and addapt the value
+    }
     if (feedrate != new_feedrate){  //If new change in the feedrate update the feedrate variable and print the new value
       feedrate = new_feedrate;
-      print_main_page(feedrate);
-      set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value
+      print_main_page(new_feedrate);
+      //set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value
     }
-    new_feedrate = read_encoder_feedrate(feedrate, change_mode);  //Check if there is change in the feedrate
-    if (read_encoderswitch() == 5){ //Check if we have Push the Encoder Switch to change the mode x1 or x10
-      change_mode = !change_mode;   //Change the mode
-      Serial.print("Change Mode");
-      Serial.print(change_mode);
-      //switch_status = 0;            //Reset status variable       REMOVE
-    }
+    new_feedrate = read_encoder_feedrate(feedrate);  //Check if there is change in the feedrate
     if (state != previous_state){   //Check if we came from other state
       lcd.clear();
       print_main_page(feedrate);
       lcd.setCursor(0,1);
       lcd.print("LEFT");
-      set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value after come from other state
+      //set_speed_mmmin(feedrate);    //Enable the PULSE Output and addapt the value after come from other state
       direction_selection(LEFT);    //Select direction pin to LEFT
       stepper_enable(ENABLE);       //Enable EN pin
     }
@@ -430,8 +461,8 @@ int check_switch_status(void)
 //Input: Current feedrate
 void print_main_page(int feed_rate)
 {
-  if(feed_rate <= 10){        //Clear one position of the screen if value lower than 10
-    lcd_clear(0,14,14);
+  if(feed_rate <= 10){        //Clear two positions of the screen if value lower than 10
+    lcd_clear(0,14,15);
   }else if(feed_rate <= 100){ //Clear one position of the screen if value lower than 100
     lcd_clear(0,15,15);
   }
@@ -444,11 +475,11 @@ void print_main_page(int feed_rate)
 //Function to read the encoder 
 //Input:  Feedrate - current feedrate value
 //        Mode - Mode for x1 or x10 multiplier for encoder increments/decrements
-int read_encoder_feedrate(int feed_rate, int mode)
+int read_encoder_feedrate(int feed_rate)
 {
+  static bool mode;
   int encoder_increment;      
   encPos += encoder.getValue(); //Get value for the encoder
-
   if (encPos != oldEncPos) {    //If the value of the encoder change
     encoder_increment = encPos - oldEncPos; //Calculate the increment of the 
     if (mode == 1){             //If we are in mode x10 multiply the increment by 10
@@ -457,6 +488,10 @@ int read_encoder_feedrate(int feed_rate, int mode)
     oldEncPos = encPos;         //Update value of old position
     feed_rate = feed_rate + encoder_increment;  //Increment the feedrate according to the encoder increment
     feed_rate = constrain(feed_rate,5,500);     //Limit the value between 
+  }
+  if (encoder.getButton() == 5){ //Check if we have Push the Encoder Switch to change the mode x1 or x10
+      mode = !mode;   //Change the mode
+      //switch_status = 0;            //Reset status variable       REMOVE
   }
   return feed_rate;   //Return the feedrate updated
 }
@@ -556,6 +591,48 @@ void draw_arrow(int direction)
     }   
   }
 
+}
+
+//Function to draw the "live" arrow 
+//Input:  Direction - Select the desired direction 
+float aceleration_feedrate(float current_feedrate, int target_feedrate){
+
+  static unsigned long current_time;    //Static variable for current millis
+  static unsigned long old_time = 0;    //Static variable for previous millis
+  static float time = 0.05;   //Static variable for previous millis
+  static bool reset = 0;      //Boolean to reset the time
+  float aceleration = 0;      //Variable to storage the aceleration
+
+  current_time = millis();
+
+  if ((current_time > old_time + 20)  && !reset){     //Change speed every 20ms
+    old_time = current_time;    
+    reset = 1;
+    if( (int)current_feedrate < target_feedrate ){    //Aceleration Positive Target > Current
+      if (target_feedrate-current_feedrate <= 50){    //Reduce aceleration when the difference between is below 50
+        aceleration  = Motor_aceleration * ((target_feedrate - current_feedrate) * 0.01); //Reduce the aceleration 
+      }else{       //Difference between target and current bigger
+        aceleration = Motor_aceleration;      
+      }
+      current_feedrate = (float) (current_feedrate + (aceleration) * time); //Formula to increate the aceleration V = Vo + a * t
+      reset = 0;
+      time = time + 0.02;     //Increase the time
+    }else if ( (int)current_feedrate > target_feedrate ){ //Aceleration Negative Current > Target
+      if (current_feedrate - target_feedrate <= 50){   //Reduce aceleration when the difference between is below 50
+        aceleration  = Motor_aceleration * ((current_feedrate - target_feedrate) * 0.01); //Reduce the aceleration 
+      }else{      //Difference between target and current bigger
+        aceleration = Motor_aceleration; 
+      }
+      current_feedrate = (float) (current_feedrate - (aceleration) * time); //Formula to increate the aceleration V = Vo + a * t
+      reset = 0;
+      time = time + 0.02;     //Increase the time
+    }
+    }else if((current_time > old_time + 20)  && reset) {  //Reached the target, reset variables
+      time = 0;
+      old_time = current_time;
+      reset = 0;
+  }
+  return current_feedrate;
 }
 /**-----------------------------------------------------------------------------------**/
 
